@@ -1,0 +1,56 @@
+package ui
+
+import (
+	"reno/internal/session"
+)
+
+// GanttTask is the row format Frappe Gantt expects.
+type GanttTask struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Start        string  `json:"start"`
+	End          string  `json:"end"`
+	Progress     float64 `json:"progress"`
+	Dependencies string  `json:"dependencies"`
+	CustomClass  string  `json:"custom_class"`
+}
+
+templ TimelinePage(user *session.User, project Project, tasks []GanttTask, hasDates bool) {
+	@Layout(project.Name+" · Timeline", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">Timeline</h1>
+			<p class="text-sm text-stone-500">Phases in amber · tasks in slate · today marked automatically</p>
+		</div>
+		if !hasDates {
+			<div class="rounded-lg bg-white p-10 text-center shadow">
+				<p class="text-stone-500">No scheduled work yet. Add start and end dates to phases, or start/due dates to tasks, and they'll appear here.</p>
+				<a class="mt-4 inline-block rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" href={ templ.URL("/projects/" + project.ID + "/tasks") }>Go to tasks</a>
+			</div>
+		} else {
+			<div class="overflow-x-auto rounded-lg bg-white p-4 shadow">
+				<svg id="gantt"></svg>
+			</div>
+			@templ.JSONScript("gantt-data", tasks)
+			<script>
+				var ganttData = JSON.parse(document.getElementById('gantt-data').textContent);
+				var ganttChart = new Gantt("#gantt", ganttData, {
+					date_format: "YYYY-MM-DD",
+					language: "en",
+					onclick: function(task) {
+						if (task.id && task.id.indexOf("phase-") !== 0) {
+							window.location = "/tasks/" + task.id;
+						}
+					}
+				});
+				function ganttSwitchMode(mode) {
+					ganttChart.change_view_mode(mode);
+				}
+			</script>
+			<div class="mt-3 flex gap-2 text-sm">
+				<button class="rounded border border-stone-300 bg-white px-3 py-1.5" onclick="ganttSwitchMode('Day')">Day</button>
+				<button class="rounded border border-stone-300 bg-white px-3 py-1.5" onclick="ganttSwitchMode('Week')">Week</button>
+				<button class="rounded border border-stone-300 bg-white px-3 py-1.5" onclick="ganttSwitchMode('Month')">Month</button>
+			</div>
+		}
+	}
+}

@@ -1,0 +1,11 @@
+{
+  "name": "reno-assets",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -i src/app.css -o public/app.css --minify",
+    "watch": "tailwindcss -i src/app.css -o public/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4"
+  }
+}

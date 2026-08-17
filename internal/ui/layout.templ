@@ -1,0 +1,65 @@
+package ui
+
+import "reno/internal/session"
+
+type ProjectNav struct {
+	ID   string
+	Name string
+}
+
+templ Layout(title string, user *session.User, project *ProjectNav) {
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<title>{ title } · Reno</title>
+		<link rel="stylesheet" href="/static/app.css"/>
+		<script src="/static/js/htmx.min.js" defer></script>
+		<script src="/static/js/sortable.min.js" defer></script>
+		<script src="/static/js/frappe-gantt.min.js" defer></script>
+		<link rel="stylesheet" href="/static/css/frappe-gantt.css"/>
+	</head>
+	<body class="min-h-screen bg-stone-100 text-stone-900">
+		<header class="bg-stone-900 text-stone-50">
+			<div class="mx-auto max-w-6xl px-4 py-3 flex items-center gap-6">
+				<a href="/" class="text-lg font-bold tracking-tight">🔨 Reno</a>
+				if project != nil {
+					<nav class="flex items-center gap-4 overflow-x-auto text-sm text-stone-300">
+						<a class="whitespace-nowrap hover:text-white" href={ templ.URL("/projects/" + project.ID + "/search") }>Search</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID) }>Dashboard</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/tasks") }>Tasks</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/timeline") }>Timeline</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/materials") }>Materials</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/budget") }>Budget</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/photos") }>Photos</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/documents") }>Documents</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/notes") }>Notes</a>
+						<a class="whitespace-nowrap hover:text-white" href={ templ.URL("/projects/" + project.ID + "/settings") }>Settings</a>
+					</nav>
+				}
+				<div class="ml-auto flex items-center gap-3 text-sm">
+					if user != nil {
+						<span class="text-stone-400">{ user.Name }</span>
+						<form method="post" action="/logout">
+							<button class="text-stone-300 hover:text-white" type="submit">Log out</button>
+						</form>
+					} else {
+						<a class="text-stone-300 hover:text-white" href="/login">Log in</a>
+						<a class="rounded bg-amber-500 hover:bg-amber-400 text-stone-900 font-semibold px-3 py-1.5" href="/register">Sign up</a>
+					}
+				</div>
+			</div>
+		</header>
+		<main class="mx-auto max-w-6xl px-4 py-8">
+			{ children... }
+		</main>
+	</body>
+	</html>
+}
+
+templ ErrorBanner(msg string) {
+	if msg != "" {
+		<div class="mb-4 rounded border border-red-300 bg-red-50 text-red-800 px-4 py-2 text-sm">{ msg }</div>
+	}
+}

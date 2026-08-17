@@ -1,0 +1,111 @@
+package ui
+
+import "reno/internal/session"
+
+type Vendor struct {
+	ID        string
+	Company   string
+	Contact   string
+	Trade     string
+	Phone     string
+	Email     string
+	Website   string
+	Address   string
+}
+
+templ VendorsPage(user *session.User, project Project, vendors []Vendor, errorMsg string) {
+	@Layout(project.Name+" · Vendors", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">Vendors & contacts</h1>
+		</div>
+		<div class="grid gap-6 lg:grid-cols-3">
+			<div class="lg:col-span-2 space-y-3">
+				if len(vendors) == 0 {
+					<div class="rounded-lg bg-white p-10 text-center shadow">
+						<p class="text-stone-500">No vendors yet. Add your contractor, electrician, suppliers…</p>
+					</div>
+				}
+				for _, v := range vendors {
+					<div class="rounded-lg bg-white p-5 shadow flex flex-wrap gap-4">
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-2">
+								<a class="font-semibold" href={ templ.URL("/vendors/" + v.ID) }>{ v.Company }</a>
+								if v.Trade != "" {
+									<span class="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">{ v.Trade }</span>
+								}
+							</div>
+							<div class="mt-1 space-y-0.5 text-sm text-stone-600">
+								if v.Contact != "" {
+									<p>{ v.Contact }</p>
+								}
+								if v.Address != "" {
+									<p>{ v.Address }</p>
+								}
+								<p class="flex flex-wrap gap-x-4">
+									if v.Phone != "" {
+										<a class="text-amber-700 underline" href={ templ.URL("tel:" + v.Phone) }>{ v.Phone }</a>
+									}
+									if v.Email != "" {
+										<a class="text-amber-700 underline" href={ templ.URL("mailto:" + v.Email) }>{ v.Email }</a>
+									}
+									if v.Website != "" {
+										<a class="text-amber-700 underline" href={ templ.URL(v.Website) } target="_blank" rel="noopener">{ v.Website }</a>
+									}
+								</p>
+							</div>
+						</div>
+						<div class="flex flex-col gap-2 text-xs">
+							<a class="underline hover:text-stone-800" href={ templ.URL("/vendors/" + v.ID) }>Edit</a>
+							if canEdit(project.Role) {
+								<form hx-post={ templ.URL("/vendors/" + v.ID + "/delete") } hx-confirm="Delete this vendor?">
+									<button class="text-red-500 underline hover:text-red-700" type="submit">Delete</button>
+								</form>
+							}
+						</div>
+					</div>
+				}
+			</div>
+			if canEdit(project.Role) {
+				<div class="lg:col-span-1">
+					@VendorForm(project.ID, Vendor{}, "/projects/"+project.ID+"/vendors", "")
+				</div>
+			}
+		</div>
+	}
+}
+
+templ VendorForm(projectID string, v Vendor, action string, errorMsg string) {
+	<form method="post" action={ templ.URL(action) } class="space-y-3 rounded-lg bg-white p-5 shadow">
+		<h2 class="font-semibold">
+			if v.ID == "" {
+				Add vendor
+			} else {
+				Edit vendor
+			}
+		</h2>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="text" name="company" placeholder="Company (required)" required value={ v.Company }/>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="text" name="contact_name" placeholder="Contact name" value={ v.Contact }/>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="text" name="trade" placeholder="Trade (e.g. Electrician)" value={ v.Trade }/>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="text" name="phone" placeholder="Phone" value={ v.Phone }/>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Email" value={ v.Email }/>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="text" name="website" placeholder="Website" value={ v.Website }/>
+		<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="text" name="address" placeholder="Address" value={ v.Address }/>
+		<textarea class="w-full rounded border border-stone-300 px-3 py-2 text-sm" name="notes" placeholder="Notes" rows="2"></textarea>
+		@ErrorBanner(errorMsg)
+		<div class="flex gap-2">
+			<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Save</button>
+			if v.ID != "" {
+				<a class="rounded border border-stone-300 px-4 py-2 text-sm" href={ templ.URL("/projects/" + projectID + "/vendors") }>Cancel</a>
+			}
+		</div>
+	</form>
+}
+
+templ VendorEdit(user *session.User, project Project, v Vendor) {
+	@Layout(project.Name+" · Edit vendor", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<a class="text-sm text-stone-500 hover:text-stone-800" href={ templ.URL("/projects/" + project.ID + "/vendors") }>← Back to vendors</a>
+		<div class="mt-4 max-w-md">
+			@VendorForm(project.ID, v, "/vendors/"+v.ID+"/update", "")
+		</div>
+	}
+}

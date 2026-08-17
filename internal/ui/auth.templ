@@ -1,0 +1,32 @@
+package ui
+
+templ AuthPage(title string, action string, errorMsg string) {
+	@Layout(title, nil, nil) {
+		<div class="mx-auto max-w-sm">
+			<h1 class="text-2xl font-bold mb-6">{ title }</h1>
+			<form method="post" action={ action } class="space-y-4 rounded-lg bg-white p-6 shadow">
+				if action == "/register" {
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="name">Name</label>
+						<input class="w-full rounded border border-stone-300 px-3 py-2" type="text" id="name" name="name" required/>
+					</div>
+				}
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="email">Email</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="email" id="email" name="email" required/>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="password">Password</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="password" id="password" name="password" minlength="8" required/>
+				</div>
+				@ErrorBanner(errorMsg)
+				<button class="w-full rounded bg-amber-500 hover:bg-amber-400 font-semibold px-3 py-2" type="submit">{ title }</button>
+			</form>
+			if action == "/login" {
+				<p class="mt-4 text-center text-sm text-stone-600">No account? <a class="text-amber-700 underline" href="/register">Sign up</a></p>
+			} else {
+				<p class="mt-4 text-center text-sm text-stone-600">Already registered? <a class="text-amber-700 underline" href="/login">Log in</a></p>
+			}
+		</div>
+	}
+}

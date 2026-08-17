@@ -1,0 +1,242 @@
+package ui
+
+import "reno/internal/session"
+
+type MaterialRow struct {
+	ID          string
+	Item        string
+	Category    string
+	Manufacturer string
+	SKU         string
+	Quantity    string
+	Unit        string
+	UnitCost    int64 // cents
+	LineTotal   int64 // cents: qty × unit cost, or actual if set
+	Actual      int64 // cents
+	Vendor      string
+	Status      string
+	Expected    string
+	ProductURL  string
+}
+
+type MaterialSort struct {
+	Field string
+	Dir   string
+	Q     string
+}
+
+func joinParts(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + " · " + b
+}
+
+func moneyOrEmpty(cents int64) string {
+	if cents <= 0 {
+		return ""
+	}
+	return money(cents)
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+func materialStatusLabel(s string) string {
+	switch s {
+	case "idea":
+		return "Idea"
+	case "to_order":
+		return "To order"
+	case "ordered":
+		return "Ordered"
+	case "shipped":
+		return "Shipped"
+	case "delivered":
+		return "Delivered"
+	case "installed":
+		return "Installed"
+	case "returned":
+		return "Returned"
+	}
+	return s
+}
+
+templ MaterialsPage(user *session.User, project Project, rows []MaterialRow, vendors []Vendor, sort MaterialSort, total int64, errorMsg string) {
+	@Layout(project.Name+" · Materials", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+			<h1 class="text-2xl font-bold">Materials & products</h1>
+			<p class="text-sm text-stone-600">Line total: <strong>{ money(total) }</strong></p>
+		</div>
+
+		<form class="mb-4 flex gap-2 max-w-md" method="get" action={ templ.URL("/projects/" + project.ID + "/materials") }>
+			<input class="flex-1 rounded border border-stone-300 px-3 py-2 text-sm" type="search" name="q" placeholder="Search item, category, manufacturer, SKU…" value={ sort.Q }/>
+			<button class="rounded bg-stone-800 hover:bg-stone-700 text-white px-4 py-2 text-sm" type="submit">Search</button>
+		</form>
+
+		<div class="overflow-x-auto rounded-lg bg-white shadow">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
+						@SortableTh(project.ID, sort, "item", "Item")
+						@SortableTh(project.ID, sort, "category", "Category")
+						<th class="px-3 py-2">Manufacturer / SKU</th>
+						@SortableTh(project.ID, sort, "quantity", "Qty")
+						@SortableTh(project.ID, sort, "unit_cost_cents", "Unit cost")
+						<th class="px-3 py-2 text-right">Line total</th>
+						<th class="px-3 py-2">Vendor</th>
+						@SortableTh(project.ID, sort, "status", "Status")
+						<th class="px-3 py-2">Delivery</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-stone-100">
+					if len(rows) == 0 {
+						<tr><td class="px-3 py-8 text-center text-stone-500" colspan="10">No materials tracked yet.</td></tr>
+					}
+					for _, m := range rows {
+						<tr class="hover:bg-stone-50">
+							<td class="px-3 py-2 font-medium">
+								if m.ProductURL != "" {
+									<a class="text-amber-700 underline" href={ templ.URL(m.ProductURL) } target="_blank" rel="noopener">{ m.Item }</a>
+								} else {
+									{ m.Item }
+								}
+							</td>
+							<td class="px-3 py-2">{ m.Category }</td>
+							<td class="px-3 py-2 text-stone-500">{ joinParts(m.Manufacturer, m.SKU) }</td>
+							<td class="px-3 py-2">{ joinParts(m.Quantity, m.Unit) }</td>
+							<td class="px-3 py-2">{ orDash(moneyOrEmpty(m.UnitCost)) }</td>
+							<td class="px-3 py-2 text-right font-medium">{ orDash(moneyOrEmpty(m.LineTotal)) }</td>
+							<td class="px-3 py-2">{ m.Vendor }</td>
+							<td class="px-3 py-2">
+								<span class="rounded-full bg-stone-100 px-2 py-0.5 text-xs">{ materialStatusLabel(m.Status) }</span>
+							</td>
+							<td class="px-3 py-2 text-stone-500">{ m.Expected }</td>
+							<td class="px-3 py-2 text-right text-xs whitespace-nowrap">
+								<a class="underline hover:text-stone-800" href={ templ.URL("/materials/" + m.ID) }>Edit</a>
+								if canEdit(project.Role) {
+									<form class="inline" hx-post={ templ.URL("/materials/" + m.ID + "/delete") } hx-confirm="Delete this material?">
+										<button class="ml-2 text-red-500 underline hover:text-red-700" type="submit">Del</button>
+									</form>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+
+		if canEdit(project.Role) {
+			<details class="mt-6 rounded-lg bg-white p-5 shadow">
+				<summary class="cursor-pointer font-semibold">+ Add material</summary>
+				<form class="mt-4 grid gap-3 sm:grid-cols-3" method="post" action={ templ.URL("/projects/" + project.ID + "/materials") }>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="item" placeholder="Item (required)" required/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="category" placeholder="Category (e.g. Flooring)"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="manufacturer" placeholder="Manufacturer"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="sku" placeholder="Model / SKU"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="quantity" type="number" step="any" min="0" placeholder="Quantity"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="unit" placeholder="Unit (sq ft, each…)"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="unit_cost" type="number" step="0.01" min="0" placeholder="Unit cost ($)"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="actual_cost" type="number" step="0.01" min="0" placeholder="Actual cost ($)"/>
+					<select class="rounded border border-stone-300 px-3 py-2 text-sm" name="vendor">
+						<option value="">Vendor…</option>
+						for _, v := range vendors {
+							<option value={ v.ID }>{ v.Company }</option>
+						}
+					</select>
+					<select class="rounded border border-stone-300 px-3 py-2 text-sm" name="status">
+						<option value="idea">Idea</option>
+						<option value="to_order">To order</option>
+						<option value="ordered">Ordered</option>
+						<option value="shipped">Shipped</option>
+						<option value="delivered">Delivered</option>
+						<option value="installed">Installed</option>
+						<option value="returned">Returned</option>
+					</select>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="expected_delivery" type="date" title="Expected delivery"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm sm:col-span-2" name="product_url" placeholder="Product URL"/>
+					<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Add</button>
+				</form>
+			</details>
+		}
+	}
+}
+
+func sortIndicator(sort MaterialSort, field string) string {
+	if sort.Field == field && sort.Dir == "asc" {
+		return " ↑"
+	}
+	if sort.Field == field {
+		return " ↓"
+	}
+	return ""
+}
+
+templ SortableTh(projectID string, sort MaterialSort, field string, label string) {
+	{{ nextDir := "asc" }}
+	if sort.Field == field && sort.Dir == "asc" {
+		{{ nextDir = "desc" }}
+	}
+	<th class="px-3 py-2">
+		<a class="hover:text-stone-800" href={ templ.URL("/projects/" + projectID + "/materials?sort=" + field + "&dir=" + nextDir) }>
+			{ label }
+			if sort.Field == field {
+				{ sortIndicator(sort, field) }
+			}
+		</a>
+	</th>
+}
+
+templ MaterialEdit(user *session.User, project Project, m MaterialRow, values map[string]string, vendors []Vendor, errorMsg string) {
+	@Layout(project.Name+" · Edit material", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<a class="text-sm text-stone-500 hover:text-stone-800" href={ templ.URL("/projects/" + project.ID + "/materials") }>← Back to materials</a>
+		<form method="post" action={ templ.URL("/materials/" + m.ID + "/update") } class="mt-4 max-w-2xl grid gap-3 sm:grid-cols-2 rounded-lg bg-white p-6 shadow">
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm sm:col-span-2" name="item" placeholder="Item" required value={ values["item"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="category" placeholder="Category" value={ values["category"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="manufacturer" placeholder="Manufacturer" value={ values["manufacturer"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="sku" placeholder="Model / SKU" value={ values["sku"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="quantity" type="number" step="any" min="0" placeholder="Quantity" value={ values["quantity"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="unit" placeholder="Unit" value={ values["unit"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="unit_cost" type="number" step="0.01" min="0" placeholder="Unit cost ($)" value={ values["unit_cost"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="actual_cost" type="number" step="0.01" min="0" placeholder="Actual cost ($)" value={ values["actual_cost"] }/>
+			<select class="rounded border border-stone-300 px-3 py-2 text-sm" name="vendor">
+				<option value="">Vendor…</option>
+				for _, v := range vendors {
+					if values["vendor"] == v.ID {
+						<option value={ v.ID } selected>{ v.Company }</option>
+					} else {
+						<option value={ v.ID }>{ v.Company }</option>
+					}
+				}
+			</select>
+			<select class="rounded border border-stone-300 px-3 py-2 text-sm" name="status">
+				{{ statuses := []string{"idea", "to_order", "ordered", "shipped", "delivered", "installed", "returned"} }}
+				for _, s := range statuses {
+					if values["status"] == s {
+						<option value={ s } selected>{ materialStatusLabel(s) }</option>
+					} else {
+						<option value={ s }>{ materialStatusLabel(s) }</option>
+					}
+				}
+			</select>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="date_ordered" type="date" title="Date ordered" value={ values["date_ordered"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="expected_delivery" type="date" title="Expected delivery" value={ values["expected_delivery"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="date_received" type="date" title="Date received" value={ values["date_received"] }/>
+			<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="product_url" placeholder="Product URL" value={ values["product_url"] }/>
+			<textarea class="rounded border border-stone-300 px-3 py-2 text-sm sm:col-span-2" name="notes" placeholder="Notes" rows="2">{ values["notes"] }</textarea>
+			@ErrorBanner(errorMsg)
+			<div class="flex gap-2 sm:col-span-2">
+				<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Save</button>
+				<a class="rounded border border-stone-300 px-4 py-2 text-sm" href={ templ.URL("/projects/" + project.ID + "/materials") }>Cancel</a>
+			</div>
+		</form>
+	}
+}

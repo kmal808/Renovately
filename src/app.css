@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+.gantt .bar-wrapper.gantt-phase .bar { fill: #f59e0b; }
+.gantt .bar-wrapper.gantt-phase .bar-label { font-weight: 700; }

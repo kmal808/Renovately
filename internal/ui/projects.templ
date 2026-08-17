@@ -1,0 +1,269 @@
+package ui
+
+import (
+	"fmt"
+
+	"reno/internal/session"
+)
+
+type Project struct {
+	ID       string
+	Name     string
+	Type     string
+	Status   string
+	Address  string
+	Start    string
+	Target   string
+	Budget   int64 // cents
+	Role     string
+	Progress int   // 0-100, computed
+}
+
+type TaskRow struct {
+	ID      string
+	Title   string
+	Due     string
+	Overdue bool
+	Status  string
+}
+
+func dashboardBarClass(b BudgetTotals) string {
+	if b.Over {
+		return "bg-red-500"
+	}
+	return "bg-amber-500"
+}
+
+func dashboardBarPct(b BudgetTotals) string {
+	if b.OriginalBudget <= 0 {
+		return "0%"
+	}
+	pct := b.Actual * 100 / b.OriginalBudget
+	if pct > 100 {
+		pct = 100
+	}
+	return fmt.Sprintf("%d%%", pct)
+}
+
+func dashboardRemainClass(b BudgetTotals) string {
+	if b.Over {
+		return "text-red-600"
+	}
+	return "text-stone-500"
+}
+
+func dueClass(overdue bool) string {
+	if overdue {
+		return "text-sm text-red-600"
+	}
+	return "text-sm text-stone-500"
+}
+
+func money(cents int64) string {
+	return fmt.Sprintf("$%.2f", float64(cents)/100)
+}
+
+func statusLabel(s string) string {
+	switch s {
+	case "planning":
+		return "Planning"
+	case "active":
+		return "Active"
+	case "on_hold":
+		return "On hold"
+	case "completed":
+		return "Completed"
+	case "cancelled":
+		return "Cancelled"
+	}
+	return s
+}
+
+func statusClass(s string) string {
+	switch s {
+	case "active":
+		return "bg-green-100 text-green-800"
+	case "planning":
+		return "bg-blue-100 text-blue-800"
+	case "on_hold":
+		return "bg-amber-100 text-amber-800"
+	case "completed":
+		return "bg-stone-200 text-stone-700"
+	default:
+		return "bg-red-100 text-red-800"
+	}
+}
+
+templ ProjectsList(user *session.User, projects []Project) {
+	@Layout("Projects", user, nil) {
+		<div class="flex items-center justify-between mb-6">
+			<h1 class="text-2xl font-bold">Your projects</h1>
+			<a class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" href="/projects/new">+ New project</a>
+		</div>
+		if len(projects) == 0 {
+			<div class="rounded-lg bg-white p-10 text-center shadow">
+				<p class="text-stone-500">No projects yet. Create your first renovation project to get started.</p>
+				<a class="mt-4 inline-block rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" href="/projects/new">Create a project</a>
+			</div>
+		} else {
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				for _, p := range projects {
+					<a class="block rounded-lg bg-white p-5 shadow hover:shadow-md" href={ templ.URL("/projects/" + p.ID) }>
+						<div class="flex items-start justify-between gap-2">
+							<h2 class="font-semibold text-lg leading-tight">{ p.Name }</h2>
+							<span class={ "rounded-full px-2 py-0.5 text-xs font-medium " + statusClass(p.Status) }>{ statusLabel(p.Status) }</span>
+						</div>
+						if p.Address != "" {
+							<p class="mt-1 text-sm text-stone-500">{ p.Address }</p>
+						}
+						<div class="mt-4">
+							<div class="flex justify-between text-xs text-stone-500 mb-1">
+								<span>Progress</span>
+								<span>{ fmt.Sprintf("%d%%", p.Progress) }</span>
+							</div>
+							<div class="h-2 rounded bg-stone-200">
+								<div class="h-2 rounded bg-amber-500" style={ templ.KV("width", fmt.Sprintf("%d%%", p.Progress)) }></div>
+							</div>
+						</div>
+						if p.Budget > 0 {
+							<p class="mt-3 text-sm text-stone-600">Budget { money(p.Budget) }</p>
+						}
+					</a>
+				}
+			</div>
+		}
+	}
+}
+
+templ ProjectForm(user *session.User, projectID string, action string, values map[string]string, errorMsg string) {
+	@Layout("Project form", user, nil) {
+		<h1 class="text-2xl font-bold mb-6">
+			if projectID == "" {
+				New project
+			} else {
+				Edit project
+			}
+		</h1>
+		<form method="post" action={ action } class="max-w-2xl space-y-4 rounded-lg bg-white p-6 shadow">
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="name">Project name</label>
+				<input class="w-full rounded border border-stone-300 px-3 py-2" type="text" id="name" name="name" required value={ values["name"] }/>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="type">Project type</label>
+					<select class="w-full rounded border border-stone-300 px-3 py-2" id="type" name="type">
+						{{ types := []string{"kitchen", "bathroom", "whole_home", "windows", "flooring", "exterior", "addition", "painting", "roofing", "custom"} }}
+						for _, t := range types {
+							if values["type"] == t {
+								<option value={ t } selected>{ t }</option>
+							} else {
+								<option value={ t }>{ t }</option>
+							}
+						}
+					</select>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="status">Status</label>
+					<select class="w-full rounded border border-stone-300 px-3 py-2" id="status" name="status">
+						{{ statuses := []string{"planning", "active", "on_hold", "completed", "cancelled"} }}
+						for _, s := range statuses {
+							if values["status"] == s {
+								<option value={ s } selected>{ statusLabel(s) }</option>
+							} else {
+								<option value={ s }>{ statusLabel(s) }</option>
+							}
+						}
+					</select>
+				</div>
+			</div>
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="property_address">Property / address</label>
+				<input class="w-full rounded border border-stone-300 px-3 py-2" type="text" id="property_address" name="property_address" value={ values["property_address"] }/>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-3">
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="start_date">Start date</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="date" id="start_date" name="start_date" value={ values["start_date"] }/>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="target_date">Target completion</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="date" id="target_date" name="target_date" value={ values["target_date"] }/>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="budget">Budget (USD)</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="number" id="budget" name="budget" min="0" step="0.01" value={ values["budget"] }/>
+				</div>
+			</div>
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="description">Description</label>
+				<textarea class="w-full rounded border border-stone-300 px-3 py-2" id="description" name="description" rows="3">{ values["description"] }</textarea>
+			</div>
+			@ErrorBanner(errorMsg)
+			<div class="flex gap-3">
+				<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" type="submit">Save</button>
+				<a class="rounded border border-stone-300 px-4 py-2" href={ templ.URL("/projects/" + projectID) }>Cancel</a>
+			</div>
+		</form>
+	}
+}
+
+templ ProjectDashboard(user *session.User, p Project, upcoming []TaskRow, budgetSummary BudgetTotals) {
+	@Layout(p.Name, user, &ProjectNav{ID: p.ID, Name: p.Name}) {
+		<div class="flex items-center justify-between mb-6">
+			<div>
+				<h1 class="text-2xl font-bold">{ p.Name }</h1>
+				<p class="text-sm text-stone-500">
+					{ statusLabel(p.Status) }
+					if p.Address != "" {
+						· { p.Address }
+					}
+					if p.Target != "" {
+						· Target { p.Target }
+					}
+				</p>
+			</div>
+			<a class="rounded border border-stone-300 bg-white px-4 py-2 text-sm hover:bg-stone-50" href={ templ.URL("/projects/" + p.ID + "/edit") }>Edit</a>
+		</div>
+
+		<div class="grid gap-4 sm:grid-cols-3 mb-6">
+			<div class="rounded-lg bg-white p-5 shadow">
+				<p class="text-sm text-stone-500">Progress</p>
+				<p class="text-3xl font-bold">{ fmt.Sprintf("%d%%", p.Progress) }</p>
+			</div>
+			<div class="rounded-lg bg-white p-5 shadow">
+				<p class="text-sm text-stone-500">Budget</p>
+				<p class="text-3xl font-bold">{ money(budgetSummary.Actual) } <span class="text-base font-normal text-stone-400">of { money(budgetSummary.OriginalBudget) }</span></p>
+				<div class="mt-2 h-2 rounded bg-stone-200">
+					<div class={ "h-2 rounded " + dashboardBarClass(budgetSummary) } style={ templ.KV("width", dashboardBarPct(budgetSummary)) }></div>
+				</div>
+				<p class={ "mt-1 text-sm " + dashboardRemainClass(budgetSummary) }>{ money(budgetSummary.Remaining) } remaining</p>
+			</div>
+			<div class="rounded-lg bg-white p-5 shadow">
+				<p class="text-sm text-stone-500">Your role</p>
+				<p class="text-3xl font-bold capitalize">{ p.Role }</p>
+			</div>
+		</div>
+
+		<div class="rounded-lg bg-white p-5 shadow">
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="font-semibold">Upcoming tasks</h2>
+				<a class="text-sm text-amber-700 underline" href={ templ.URL("/projects/" + p.ID + "/tasks") }>All tasks →</a>
+			</div>
+			if len(upcoming) == 0 {
+				<p class="text-sm text-stone-500">Nothing scheduled. Add tasks to start planning.</p>
+			} else {
+				<ul class="divide-y divide-stone-100">
+					for _, t := range upcoming {
+						<li class="flex items-center justify-between py-2">
+							<span>{ t.Title }</span>
+							if t.Due != "" {
+								<span class={ dueClass(t.Overdue) }>{ t.Due }</span>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	}
+}

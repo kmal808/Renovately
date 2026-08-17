@@ -1,0 +1,155 @@
+package ui
+
+import (
+	"fmt"
+
+	"reno/internal/session"
+)
+
+type BudgetCategory struct {
+	Name       string
+	Estimated  int64 // cents
+	Committed  int64
+	Paid       int64
+	Materials  int64 // material line totals
+	Tasks      int64 // task actual costs
+	Actual     int64 // Materials + Tasks + Paid
+}
+
+type BudgetTotals struct {
+	OriginalBudget int64
+	Actual         int64
+	Remaining      int64
+	Over           bool
+}
+
+func budgetCategoryLabel(c string) string {
+	switch c {
+	case "materials":
+		return "Materials"
+	case "labor":
+		return "Labor"
+	case "permits":
+		return "Permits"
+	case "design":
+		return "Design"
+	case "appliances":
+		return "Appliances"
+	case "fixtures":
+		return "Fixtures"
+	case "electrical":
+		return "Electrical"
+	case "plumbing":
+		return "Plumbing"
+	case "flooring":
+		return "Flooring"
+	case "windows_doors":
+		return "Windows & doors"
+	case "paint":
+		return "Paint"
+	case "misc":
+		return "Miscellaneous"
+	}
+	return c
+}
+
+templ BudgetPage(user *session.User, project Project, categories []BudgetCategory, totals BudgetTotals, errorMsg string) {
+	@Layout(project.Name+" · Budget", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<h1 class="text-2xl font-bold mb-6">Budget</h1>
+
+		<div class="mb-6 grid gap-4 sm:grid-cols-3">
+			<div class="rounded-lg bg-white p-5 shadow">
+				<p class="text-sm text-stone-500">Budget</p>
+				<p class="text-3xl font-bold">{ money(totals.OriginalBudget) }</p>
+			</div>
+			<div class="rounded-lg bg-white p-5 shadow">
+				<p class="text-sm text-stone-500">Actual to date</p>
+				<p class={ "text-3xl font-bold " + dangerClass(totals.Over) }>{ money(totals.Actual) }</p>
+			</div>
+			<div class="rounded-lg bg-white p-5 shadow">
+				<p class="text-sm text-stone-500">Remaining</p>
+				<p class={ "text-3xl font-bold " + dangerClass(totals.Over) }>{ money(totals.Remaining) }</p>
+				<div class="mt-2 h-2 rounded bg-stone-200">
+					<div class={ "h-2 rounded " + budgetBarClass(totals) } style={ templ.KV("width", budgetBarPct(totals)) }></div>
+				</div>
+			</div>
+		</div>
+
+		<div class="overflow-x-auto rounded-lg bg-white shadow mb-6">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
+						<th class="px-3 py-2">Category</th>
+						<th class="px-3 py-2 text-right">Estimated</th>
+						<th class="px-3 py-2 text-right">Committed</th>
+						<th class="px-3 py-2 text-right">Paid</th>
+						<th class="px-3 py-2 text-right">Materials</th>
+						<th class="px-3 py-2 text-right">Task costs</th>
+						<th class="px-3 py-2 text-right">Actual</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-stone-100">
+					if len(categories) == 0 {
+						<tr><td class="px-3 py-8 text-center text-stone-500" colspan="7">No budget lines or tracked costs yet.</td></tr>
+					}
+					for _, c := range categories {
+						<tr class="hover:bg-stone-50">
+							<td class="px-3 py-2 font-medium">{ budgetCategoryLabel(c.Name) }</td>
+							<td class="px-3 py-2 text-right">{ orDash(moneyOrEmpty(c.Estimated)) }</td>
+							<td class="px-3 py-2 text-right">{ orDash(moneyOrEmpty(c.Committed)) }</td>
+							<td class="px-3 py-2 text-right">{ orDash(moneyOrEmpty(c.Paid)) }</td>
+							<td class="px-3 py-2 text-right">{ orDash(moneyOrEmpty(c.Materials)) }</td>
+							<td class="px-3 py-2 text-right">{ orDash(moneyOrEmpty(c.Tasks)) }</td>
+							<td class="px-3 py-2 text-right font-semibold">{ orDash(moneyOrEmpty(c.Actual)) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		<p class="mb-6 text-xs text-stone-400">“Actual” = paid budget lines + material line totals + task actual costs. Edit the project budget from the project page.</p>
+
+		if canEdit(project.Role) {
+			<details class="rounded-lg bg-white p-5 shadow">
+				<summary class="cursor-pointer font-semibold">+ Add budget line</summary>
+				<form class="mt-4 grid gap-3 sm:grid-cols-6" method="post" action={ templ.URL("/projects/" + project.ID + "/budget") }>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm sm:col-span-2" name="label" placeholder="Label (e.g. Cabinets)" required/>
+					<select class="rounded border border-stone-300 px-3 py-2 text-sm" name="category">
+						{{ cats := []string{"materials", "labor", "permits", "design", "appliances", "fixtures", "electrical", "plumbing", "flooring", "windows_doors", "paint", "misc"} }}
+						for _, c := range cats {
+							<option value={ c }>{ budgetCategoryLabel(c) }</option>
+						}
+					</select>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="estimated" type="number" step="0.01" min="0" placeholder="Est. ($)"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="committed" type="number" step="0.01" min="0" placeholder="Committed ($)"/>
+					<input class="rounded border border-stone-300 px-3 py-2 text-sm" name="paid" type="number" step="0.01" min="0" placeholder="Paid ($)"/>
+					<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Add</button>
+				</form>
+			</details>
+		}
+	}
+}
+
+func dangerClass(over bool) string {
+	if over {
+		return "text-red-600"
+	}
+	return "text-stone-900"
+}
+
+func budgetBarClass(t BudgetTotals) string {
+	if t.Over || t.OriginalBudget <= 0 {
+		return "bg-red-500"
+	}
+	return "bg-amber-500"
+}
+
+func budgetBarPct(t BudgetTotals) string {
+	if t.OriginalBudget <= 0 {
+		return "100%"
+	}
+	pct := t.Actual * 100 / t.OriginalBudget
+	if pct > 100 {
+		pct = 100
+	}
+	return fmt.Sprintf("%d%%", pct)
+}

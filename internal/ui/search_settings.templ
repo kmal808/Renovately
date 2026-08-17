@@ -1,0 +1,139 @@
+package ui
+
+import "reno/internal/session"
+
+type SearchHit struct {
+	Kind        string // task / material / vendor / note / document / photo
+	ID          string
+	Title       string
+	Description string
+	URL         string
+}
+
+type SearchResult struct {
+	Kind  string
+	Label string
+	Hits  []SearchHit
+}
+
+templ SearchPage(user *session.User, project Project, q string, results []SearchResult) {
+	@Layout(project.Name+" · Search", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<h1 class="text-2xl font-bold mb-6">Search</h1>
+		<form class="mb-6 flex max-w-md gap-2" method="get" action={ templ.URL("/projects/" + project.ID + "/search") }>
+			<input class="flex-1 rounded border border-stone-300 px-3 py-2" type="search" name="q" placeholder="Search tasks, materials, vendors, notes, documents, photos…" value={ q } autofocus/>
+			<button class="rounded bg-stone-800 hover:bg-stone-700 text-white px-4 py-2" type="submit">Search</button>
+		</form>
+		if q != "" {
+			if len(results) == 0 {
+				<div class="rounded-lg bg-white p-8 text-center shadow">
+					<p class="text-stone-500">No matches for “{ q }”.</p>
+				</div>
+			}
+			for _, r := range results {
+				if len(r.Hits) > 0 {
+					<section class="mb-6">
+						<h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-stone-500">{ r.Label } ({ len(r.Hits) })</h2>
+						<ul class="divide-y divide-stone-100 rounded-lg bg-white shadow">
+							for _, hit := range r.Hits {
+								<li class="px-4 py-3 hover:bg-stone-50">
+									<a class="font-medium text-amber-700 underline" href={ templ.URL(hit.URL) }>{ hit.Title }</a>
+									if hit.Description != "" {
+										<p class="mt-0.5 text-sm text-stone-500 truncate">{ hit.Description }</p>
+									}
+								</li>
+							}
+						</ul>
+					</section>
+				}
+			}
+		}
+	}
+}
+
+// ---------- Settings / members ----------
+
+type MemberRow struct {
+	ID     string
+	UserID string
+	Name   string
+	Email  string
+	Role   string
+}
+
+templ SettingsPage(user *session.User, project Project, members []MemberRow, me string, errorMsg string) {
+	@Layout(project.Name+" · Settings", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<h1 class="text-2xl font-bold mb-6">Project settings</h1>
+		<div class="space-y-6 max-w-3xl">
+			<section class="rounded-lg bg-white p-6 shadow">
+				<div class="flex items-center justify-between">
+					<h2 class="font-semibold">Project</h2>
+					<a class="text-sm text-amber-700 underline" href={ templ.URL("/projects/" + project.ID + "/edit") }>Edit details</a>
+				</div>
+				<p class="mt-2 text-sm text-stone-600">{ project.Name } · { statusLabel(project.Status) }
+					if project.Address != "" {
+						· { project.Address }
+					}</p>
+			</section>
+
+			<section class="rounded-lg bg-white p-6 shadow">
+				<h2 class="font-semibold mb-4">Members</h2>
+				<ul class="divide-y divide-stone-100">
+					for _, mbr := range members {
+						<li class="flex flex-wrap items-center gap-3 py-3">
+							<div class="min-w-0 flex-1">
+								<p class="font-medium">
+									{ mbr.Name }
+									if mbr.UserID == me {
+										<span class="text-xs text-stone-400">(you)</span>
+									}
+								</p>
+								<p class="text-sm text-stone-500">{ mbr.Email }</p>
+							</div>
+							if project.Role == "owner" && mbr.UserID != me {
+								<form class="flex items-center gap-2" hx-post={ templ.URL("/members/" + mbr.ID + "/role") }>
+									<select class="rounded border border-stone-300 px-2 py-1 text-sm" name="role">
+										{{ roles := []string{"owner", "editor", "viewer"} }}
+										for _, r := range roles {
+											if mbr.Role == r {
+												<option value={ r } selected>{ r }</option>
+											} else {
+												<option value={ r }>{ r }</option>
+											}
+										}
+									</select>
+									<button class="text-sm text-amber-700 underline" type="submit">Update</button>
+								</form>
+								<form hx-post={ templ.URL("/members/" + mbr.ID + "/remove") } hx-confirm={ "Remove " + mbr.Name + " from this project?" }>
+									<button class="text-sm text-red-500 underline hover:text-red-700" type="submit">Remove</button>
+								</form>
+							} else {
+								<span class="rounded-full bg-stone-100 px-2 py-0.5 text-xs capitalize">{ mbr.Role }</span>
+							}
+						</li>
+					}
+				</ul>
+				@ErrorBanner(errorMsg)
+				if project.Role == "owner" {
+					<form class="mt-4 flex flex-wrap gap-2 border-t border-stone-100 pt-4" hx-post={ templ.URL("/projects/" + project.ID + "/members") }>
+						<input class="flex-1 min-w-48 rounded border border-stone-300 px-3 py-2 text-sm" type="email" name="email" placeholder="Invite by email (must be registered)" required/>
+						<select class="rounded border border-stone-300 px-3 py-2 text-sm" name="role">
+							<option value="editor">editor</option>
+							<option value="viewer">viewer</option>
+						</select>
+						<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Invite</button>
+					</form>
+				}
+			</section>
+
+			if project.Role == "owner" {
+				<section class="rounded-lg border border-red-200 bg-red-50 p-6">
+					<h2 class="font-semibold text-red-800">Danger zone</h2>
+					<p class="mt-1 text-sm text-red-700">Deleting a project removes its tasks, materials, photos, documents, and budget lines permanently.</p>
+					<form class="mt-3" method="post" action={ templ.URL("/projects/" + project.ID + "/delete") } onsubmit="return confirm('Really delete this entire project? This cannot be undone.')">
+						<button class="rounded bg-red-600 hover:bg-red-500 text-white font-semibold px-4 py-2 text-sm" type="submit">Delete project</button>
+					</form>
+				</section>
+			}
+		</div>
+	}
+}

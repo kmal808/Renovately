@@ -1,0 +1,301 @@
+package ui
+
+import "reno/internal/session"
+
+type TaskTree struct {
+	ID           string
+	ProjectID    string
+	Title        string
+	Status       string
+	Priority     string
+	Due          string
+	Assignee     string
+	Kind         string
+	Overdue      bool
+	HasChildren  bool
+	Children     []TaskTree
+}
+
+type PhaseBlock struct {
+	ID     string
+	Name   string
+	Status string
+	Tasks  []TaskTree
+}
+
+func taskStatusLabel(s string) string {
+	switch s {
+	case "todo":
+		return "To do"
+	case "in_progress":
+		return "In progress"
+	case "blocked":
+		return "Blocked"
+	case "done":
+		return "Done"
+	}
+	return s
+}
+
+func taskStatusClass(s string) string {
+	switch s {
+	case "todo":
+		return "bg-stone-200 text-stone-700"
+	case "in_progress":
+		return "bg-blue-100 text-blue-800"
+	case "blocked":
+		return "bg-red-100 text-red-800"
+	case "done":
+		return "bg-green-100 text-green-800"
+	}
+	return "bg-stone-200 text-stone-700"
+}
+
+func taskPriorityClass(p string) string {
+	switch p {
+	case "urgent":
+		return "bg-red-500"
+	case "high":
+		return "bg-orange-400"
+	case "medium":
+		return "bg-amber-300"
+	case "low":
+		return "bg-stone-300"
+	}
+	return "bg-stone-300"
+}
+
+templ TasksPage(user *session.User, project Project, phases []PhaseBlock, view string) {
+	@Layout(project.Name+" · Tasks", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+			<h1 class="text-2xl font-bold">Tasks</h1>
+			<div class="flex rounded border border-stone-300 bg-white text-sm">
+				if view == "board" {
+					<a class="px-3 py-1.5" href={ templ.URL("/projects/" + project.ID + "/tasks") }>List</a>
+					<span class="bg-stone-900 text-white px-3 py-1.5">Board</span>
+				} else {
+					<span class="bg-stone-900 text-white px-3 py-1.5">List</span>
+					<a class="px-3 py-1.5" href={ templ.URL("/projects/" + project.ID + "/tasks?view=board") }>Board</a>
+				}
+			</div>
+		</div>
+		@TaskListContent(project, phases, view)
+		@TaskScripts()
+	}
+}
+
+// TaskListContent is the htmx swap target: mutations re-render just this fragment.
+templ TaskListContent(project Project, phases []PhaseBlock, view string) {
+	<div id="task-list" class="space-y-6">
+		if view == "board" {
+			@TaskBoard(project, phases)
+		} else {
+			for _, ph := range phases {
+					<section class="rounded-lg bg-white shadow">
+						<header class="flex flex-wrap items-center gap-3 border-b border-stone-100 px-5 py-3">
+							<h2 class="font-semibold">{ ph.Name }</h2>
+							<span class={ "rounded-full px-2 py-0.5 text-xs font-medium " + taskStatusClass(mapPhaseStatus(ph.Status)) }>{ ph.Status }</span>
+							if canEdit(project.Role) {
+								<form class="ml-auto" hx-post={ templ.URL("/phases/" + ph.ID + "/status") } hx-target="#task-list" hx-swap="outerHTML">
+									<input type="hidden" name="next" value={ ph.Status }/>
+									<button class="text-xs text-stone-500 underline hover:text-stone-800" type="submit">
+										if ph.Status == "done" {
+											Reopen phase
+										} else {
+											Mark phase { phaseNextLabel(ph.Status) }
+										}
+									</button>
+								</form>
+								<form hx-post={ templ.URL("/phases/" + ph.ID + "/delete") } hx-target="#task-list" hx-swap="outerHTML" hx-confirm="Delete this phase and all its tasks?">
+									<button class="text-xs text-red-500 underline hover:text-red-700" type="submit">Delete</button>
+								</form>
+							}
+						</header>
+						<ul class="divide-y divide-stone-100 px-2 py-2" data-phase={ ph.ID } data-sortable="tasks">
+							for _, t := range ph.Tasks {
+								@TaskNode(t, project, 0)
+							}
+						</ul>
+						if canEdit(project.Role) {
+							<div class="border-t border-stone-100 px-5 py-3">
+								@QuickAddForm("/phases/"+ph.ID+"/tasks", "Add task")
+							</div>
+						}
+					</section>
+				}
+				if len(phases) == 0 {
+					<div class="rounded-lg bg-white p-10 text-center shadow">
+						<p class="text-stone-500">No phases yet. Renovation projects usually break down into phases like Demolition, Electrical, Cabinets…</p>
+					</div>
+				}
+				if canEdit(project.Role) {
+					<form class="flex max-w-xl gap-2" hx-post={ templ.URL("/projects/" + project.ID + "/phases") } hx-target="#task-list" hx-swap="outerHTML">
+						<input class="flex-1 rounded border border-stone-300 px-3 py-2" type="text" name="name" placeholder="New phase (e.g. Demolition)"/>
+						<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" type="submit">Add phase</button>
+					</form>
+				}
+		}
+	</div>
+}
+
+func mapPhaseStatus(s string) string {
+	if s == "" {
+		return "not_started"
+	}
+	return s
+}
+
+func canEdit(role string) bool { return role == "owner" || role == "editor" }
+
+func titleClass(done bool) string {
+	if done {
+		return "flex-1 line-through text-stone-400"
+	}
+	return "flex-1"
+}
+
+func phaseNextLabel(s string) string {
+	if s == "not_started" {
+		return "in progress"
+	}
+	return "done"
+}
+
+templ QuickAddForm(action string, placeholder string) {
+	<form class="flex gap-2" hx-post={ templ.URL(action) } hx-target="#task-list" hx-swap="outerHTML">
+		<input class="flex-1 rounded border border-stone-300 px-3 py-1.5 text-sm" type="text" name="title" placeholder={ placeholder } required/>
+		<button class="rounded bg-stone-800 hover:bg-stone-700 text-white text-sm px-3 py-1.5" type="submit">Add</button>
+	</form>
+}
+
+templ TaskNode(t TaskTree, project Project, depth int) {
+	<li class="group rounded px-3 py-2 hover:bg-stone-50" data-task={ t.ID } data-kind={ t.Kind }>
+		<div class="flex items-center gap-2">
+			<input type="checkbox"
+				checked={ t.Status == "done" }
+				hx-post={ templ.URL("/tasks/" + t.ID + "/toggle") }
+				hx-target="#task-list" hx-swap="outerHTML"
+				class="h-4 w-4 accent-amber-600"/>
+			<a class={ titleClass(t.Status == "done") } href={ templ.URL("/tasks/" + t.ID) }>
+				if t.Kind == "checklist_item" {
+					<span class="text-sm text-stone-500">☐</span>
+				}
+				{ t.Title }
+			</a>
+			if t.Priority != "" && t.Priority != "low" {
+				<span class={ "h-2 w-2 rounded-full " + taskPriorityClass(t.Priority) } title={ t.Priority }></span>
+			}
+			if t.Assignee != "" {
+				<span class="hidden sm:inline text-xs text-stone-400">{ t.Assignee }</span>
+			}
+			if t.Due != "" {
+				<span class={ "text-xs " + dueClass(t.Overdue) }>{ t.Due }</span>
+			}
+			<span class={ "rounded-full px-2 py-0.5 text-xs font-medium " + taskStatusClass(t.Status) }>{ taskStatusLabel(t.Status) }</span>
+			<details class="relative">
+				<summary class="cursor-pointer list-none text-stone-400 hover:text-stone-700 select-none">⋯</summary>
+				<div class="absolute right-0 z-10 mt-1 w-56 rounded border border-stone-200 bg-white p-3 text-sm shadow-lg">
+					<button class="block w-full rounded px-2 py-1 text-left hover:bg-stone-100"
+						hx-post={ templ.URL("/tasks/" + t.ID + "/cycle") } hx-target="#task-list" hx-swap="outerHTML">Change status</button>
+					<form hx-post={ templ.URL("/tasks/" + t.ID + "/delete") } hx-target="#task-list" hx-swap="outerHTML" hx-confirm="Delete this task and its subtasks?">
+						<button class="block w-full rounded px-2 py-1 text-left text-red-600 hover:bg-red-50" type="submit">Delete</button>
+					</form>
+					<a class="block rounded px-2 py-1 hover:bg-stone-100" href={ templ.URL("/tasks/" + t.ID) }>Open details…</a>
+				</div>
+			</details>
+		</div>
+		if len(t.Children) > 0 {
+			<ul class="mt-1 ml-6 border-l border-stone-200 pl-2" data-parent={ t.ID } data-sortable="tasks">
+				for _, c := range t.Children {
+					@TaskNode(c, project, depth+1)
+				}
+			</ul>
+		}
+		if canEdit(project.Role) && depth < 2 {
+			<div class="ml-6 mt-1 hidden group-hover:block">
+				@QuickAddForm("/tasks/"+t.ID+"/children", "Add "+nextKindLabel(t.Kind))
+			</div>
+		}
+	</li>
+}
+
+func nextKindLabel(kind string) string {
+	switch kind {
+	case "task":
+		return "subtask"
+	case "subtask":
+		return "checklist item"
+	}
+	return "subtask"
+}
+
+// TaskBoard renders the kanban view of top-level tasks.
+templ TaskBoard(project Project, phases []PhaseBlock) {
+	{{ statuses := []string{"todo", "in_progress", "blocked", "done"} }}
+	<div class="grid gap-4 md:grid-cols-4">
+		for _, s := range statuses {
+			<div class="rounded-lg bg-white p-3 shadow" data-status={ s } data-sortable="board">
+				<h3 class="mb-2 px-1 text-sm font-semibold">{ taskStatusLabel(s) }</h3>
+				<ul class="space-y-2 min-h-8">
+					for _, ph := range phases {
+						for _, t := range ph.Tasks {
+							if t.Status == s && t.Kind == "task" {
+								<li class="rounded border border-stone-200 p-2 text-sm" data-task={ t.ID }>
+									<a href={ templ.URL("/tasks/" + t.ID) }>{ t.Title }</a>
+									if t.Due != "" {
+										<p class={ "mt-1 text-xs " + dueClass(t.Overdue) }>{ t.Due }</p>
+									}
+									<p class="mt-1 text-xs text-stone-400">{ ph.Name }</p>
+								</li>
+							}
+						}
+					}
+				</ul>
+			</div>
+		}
+	</div>
+}
+
+// TaskScripts initializes drag-drop ordering.
+templ TaskScripts() {
+	<script>
+		document.addEventListener("htmx:afterSwap", initSortables);
+		document.addEventListener("DOMContentLoaded", initSortables);
+
+		function initSortables() {
+			document.querySelectorAll("[data-sortable='tasks']").forEach(function(list) {
+				if (list._sortable) return;
+				list._sortable = new Sortable(list, {
+					group: "tasks",
+					handle: "li",
+					animation: 150,
+					onEnd: function(evt) {
+						var el = evt.item;
+						var data = {
+							parent: evt.to.dataset.parent || "",
+							phase: evt.to.dataset.phase || "",
+							prev: "",
+							next: ""
+						};
+						if (el.previousElementSibling && el.previousElementSibling.dataset.task) data.prev = el.previousElementSibling.dataset.task;
+						if (el.nextElementSibling && el.nextElementSibling.dataset.task) data.next = el.nextElementSibling.dataset.task;
+						htmx.ajax("POST", "/tasks/" + el.dataset.task + "/move", {target: "#task-list", swap: "outerHTML", values: data});
+					}
+				});
+			});
+			document.querySelectorAll("[data-sortable='board']").forEach(function(col) {
+				if (col._sortable) return;
+				col._sortable = new Sortable(col, {
+					group: "board",
+					animation: 150,
+					onEnd: function(evt) {
+						htmx.ajax("POST", "/tasks/" + evt.item.dataset.task + "/move", {
+							target: "#task-list", swap: "outerHTML",
+							values: {board: "1", status: evt.to.dataset.status}
+						});
+					}
+				});
+			});
+		}
+	</script>
+}

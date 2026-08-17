@@ -1,0 +1,94 @@
+package ui
+
+import "reno/internal/session"
+
+type PhaseOption struct {
+	ID   string
+	Name string
+}
+
+templ TaskDetail(user *session.User, project Project, taskID string, values map[string]string, phases []PhaseOption, errorMsg string) {
+	@Layout(project.Name+" · Task", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<a class="text-sm text-stone-500 hover:text-stone-800" href={ templ.URL("/projects/" + project.ID + "/tasks") }>← Back to tasks</a>
+		<form method="post" action={ templ.URL("/tasks/" + taskID + "/update") } class="mt-4 max-w-2xl space-y-4 rounded-lg bg-white p-6 shadow">
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="title">Title</label>
+				<input class="w-full rounded border border-stone-300 px-3 py-2" type="text" id="title" name="title" required value={ values["title"] }/>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-3">
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="status">Status</label>
+					<select class="w-full rounded border border-stone-300 px-3 py-2" id="status" name="status">
+						{{ statuses := []string{"todo", "in_progress", "blocked", "done"} }}
+						for _, s := range statuses {
+							if values["status"] == s {
+								<option value={ s } selected>{ taskStatusLabel(s) }</option>
+							} else {
+								<option value={ s }>{ taskStatusLabel(s) }</option>
+							}
+						}
+					</select>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="priority">Priority</label>
+					<select class="w-full rounded border border-stone-300 px-3 py-2" id="priority" name="priority">
+						{{ prios := []string{"low", "medium", "high", "urgent"} }}
+						for _, pr := range prios {
+							if values["priority"] == pr {
+								<option value={ pr } selected>{ pr }</option>
+							} else {
+								<option value={ pr }>{ pr }</option>
+							}
+						}
+					</select>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="phase">Phase</label>
+					<select class="w-full rounded border border-stone-300 px-3 py-2" id="phase" name="phase">
+						<option value="">—</option>
+						for _, ph := range phases {
+							if values["phase"] == ph.ID {
+								<option value={ ph.ID } selected>{ ph.Name }</option>
+							} else {
+								<option value={ ph.ID }>{ ph.Name }</option>
+							}
+						}
+					</select>
+				</div>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-3">
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="start_date">Start date</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="date" id="start_date" name="start_date" value={ values["start_date"] }/>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="due_date">Due date</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="date" id="due_date" name="due_date" value={ values["due_date"] }/>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="assignee">Assignee</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="text" id="assignee" name="assignee" value={ values["assignee"] }/>
+				</div>
+			</div>
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="estimated_cost">Estimated cost (USD)</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="number" id="estimated_cost" name="estimated_cost" min="0" step="0.01" value={ values["estimated_cost"] }/>
+				</div>
+				<div>
+					<label class="mb-1 block text-sm font-medium" for="actual_cost">Actual cost (USD)</label>
+					<input class="w-full rounded border border-stone-300 px-3 py-2" type="number" id="actual_cost" name="actual_cost" min="0" step="0.01" value={ values["actual_cost"] }/>
+				</div>
+			</div>
+			<div>
+				<label class="mb-1 block text-sm font-medium" for="description">Description / notes</label>
+				<textarea class="w-full rounded border border-stone-300 px-3 py-2" id="description" name="description" rows="4">{ values["description"] }</textarea>
+			</div>
+			@ErrorBanner(errorMsg)
+			<div class="flex gap-3">
+				<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" type="submit">Save</button>
+				<a class="rounded border border-stone-300 px-4 py-2" href={ templ.URL("/projects/" + project.ID + "/tasks") }>Cancel</a>
+			</div>
+		</form>
+	}
+}

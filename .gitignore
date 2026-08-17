@@ -1,0 +1,11 @@
+/reno
+/data/
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+.DS_Store
+
+# agent session artifacts
+.zcode/
+.remember/

@@ -1,0 +1,113 @@
+package ui
+
+import "reno/internal/session"
+
+// ---------- Notes ----------
+
+type NoteRow struct {
+	ID     string
+	Body   string
+	Pinned bool
+}
+
+templ NotesPage(user *session.User, project Project, notes []NoteRow, decisions []DecisionRow, errorMsg string) {
+	@Layout(project.Name+" · Notes", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<h1 class="text-2xl font-bold mb-6">Notes & decisions</h1>
+		<div class="grid gap-6 lg:grid-cols-2">
+			<div>
+				<h2 class="font-semibold mb-3">Notes</h2>
+				<div class="space-y-3">
+					if len(notes) == 0 {
+						<p class="text-sm text-stone-500">No notes yet.</p>
+					}
+					for _, n := range notes {
+						<div class={ "rounded-lg bg-white p-4 shadow " + pinnedRing(n.Pinned) }>
+							<p class="whitespace-pre-wrap text-sm">{ n.Body }</p>
+							if canEdit(project.Role) {
+								<div class="mt-2 flex gap-3 text-xs">
+									<form hx-post={ templ.URL("/notes/" + n.ID + "/pin") }>
+										<button class="text-stone-500 underline hover:text-stone-800" type="submit">
+											if n.Pinned {
+												Unpin
+											} else {
+												Pin
+											}
+										</button>
+									</form>
+									<form hx-post={ templ.URL("/notes/" + n.ID + "/delete") } hx-confirm="Delete this note?">
+										<button class="text-red-500 underline hover:text-red-700" type="submit">Delete</button>
+									</form>
+								</div>
+							}
+						</div>
+					}
+				</div>
+				if canEdit(project.Role) {
+					<form class="mt-4 space-y-3 rounded-lg bg-white p-4 shadow" method="post" action={ templ.URL("/projects/" + project.ID + "/notes") }>
+						<textarea class="w-full rounded border border-stone-300 px-3 py-2 text-sm" name="body" rows="3" placeholder="Add a note…" required></textarea>
+						<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Add note</button>
+					</form>
+				}
+			</div>
+			<div>
+				<h2 class="font-semibold mb-3">Decision log</h2>
+				<div class="space-y-3">
+					if len(decisions) == 0 {
+						<p class="text-sm text-stone-500">No decisions logged yet.</p>
+					}
+					for _, d := range decisions {
+						<div class="rounded-lg bg-white p-4 shadow">
+							<p class="font-medium">{ d.Title }</p>
+							if len(d.Options) > 0 {
+								<p class="mt-1 text-sm text-stone-500">Options: { d.Options }</p>
+							}
+							<div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+								if d.Selected != "" {
+									<span class="rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs font-medium">✓ { d.Selected }</span>
+								}
+								if d.Date != "" {
+									<span class="text-xs text-stone-400">{ d.Date }</span>
+								}
+							</div>
+							if d.Notes != "" {
+								<p class="mt-2 whitespace-pre-wrap text-sm text-stone-600">{ d.Notes }</p>
+							}
+							if canEdit(project.Role) {
+								<form class="mt-2" hx-post={ templ.URL("/decisions/" + d.ID + "/delete") } hx-confirm="Delete this decision?">
+									<button class="text-xs text-red-500 underline hover:text-red-700" type="submit">Delete</button>
+								</form>
+							}
+						</div>
+					}
+				</div>
+				if canEdit(project.Role) {
+					<form class="mt-4 space-y-3 rounded-lg bg-white p-4 shadow" method="post" action={ templ.URL("/projects/" + project.ID + "/decisions") }>
+						<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" name="title" placeholder="Decision (e.g. Kitchen countertop material)" required/>
+						<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" name="options" placeholder="Options (comma-separated: Quartz, Granite, Porcelain)"/>
+						<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" name="selected" placeholder="Selected (e.g. Quartz)"/>
+						<input class="w-full rounded border border-stone-300 px-3 py-2 text-sm" type="date" name="decided_date" title="Decision date"/>
+						<textarea class="w-full rounded border border-stone-300 px-3 py-2 text-sm" name="notes" rows="2" placeholder="Notes"></textarea>
+						@ErrorBanner(errorMsg)
+						<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2 text-sm" type="submit">Log decision</button>
+					</form>
+				}
+			</div>
+		</div>
+	}
+}
+
+type DecisionRow struct {
+	ID       string
+	Title    string
+	Options  string
+	Selected string
+	Date     string
+	Notes    string
+}
+
+func pinnedRing(p bool) string {
+	if p {
+		return "ring-2 ring-amber-400"
+	}
+	return ""
+}
