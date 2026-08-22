@@ -1,0 +1,13 @@
+.git
+.remember
+.zcode
+node_modules
+reno
+reno-*
+public/app.css
+*_templ.go
+pb_data
+data.db*
+*.db-shm
+*.db-wal
+.DS_Store
