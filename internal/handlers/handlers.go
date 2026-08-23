@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -102,11 +103,24 @@ func (h *H) loginSubmit(e *core.RequestEvent) error {
 	return redirect(e, http.StatusSeeOther, "/")
 }
 
+// signupsDisabled reports whether open registration is turned off via
+// RENO_DISABLE_SIGNUPS=1 (set this in production; new accounts can still be
+// created from the PocketBase admin UI if ever needed).
+func signupsDisabled() bool {
+	return os.Getenv("RENO_DISABLE_SIGNUPS") == "1" || strings.EqualFold(os.Getenv("RENO_DISABLE_SIGNUPS"), "true")
+}
+
 func (h *H) registerPage(e *core.RequestEvent) error {
+	if signupsDisabled() {
+		return renderPage(e, ui.AuthPage("Sign up", "/register", "Sign-ups are disabled on this instance. Ask the administrator for an account."), http.StatusForbidden)
+	}
 	return renderPage(e, ui.AuthPage("Sign up", "/register", ""))
 }
 
 func (h *H) registerSubmit(e *core.RequestEvent) error {
+	if signupsDisabled() {
+		return renderPage(e, ui.AuthPage("Sign up", "/register", "Sign-ups are disabled on this instance. Ask the administrator for an account."), http.StatusForbidden)
+	}
 	name := strings.TrimSpace(e.Request.FormValue("name"))
 	email := strings.TrimSpace(e.Request.FormValue("email"))
 	password := e.Request.FormValue("password")

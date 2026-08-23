@@ -431,3 +431,24 @@ func TestSearchFindsAcrossEntities(t *testing.T) {
 		t.Error("search should match task and material case-insensitively")
 	}
 }
+
+func TestSignupKillSwitch(t *testing.T) {
+	env := newTestEnv(t)
+	c := anonClient(t, env)
+
+	// open by default
+	c.get("/register", 200)
+
+	// disabled via env
+	t.Setenv("RENO_DISABLE_SIGNUPS", "1")
+	body := c.get("/register", 403)
+	if !strings.Contains(body, "Sign-ups are disabled") {
+		t.Error("disabled register page should explain sign-ups are off")
+	}
+	c.postForm("/register", url.Values{"name": {"Bad"}, "email": {"bad@x.com"}, "password": {"password123"}}, 403)
+
+	// no user was created
+	if records, _ := env.app.FindRecordsByFilter("users", "", "", 0, 0); len(records) != 0 {
+		t.Errorf("disabled signup should not create users, got %d", len(records))
+	}
+}
