@@ -42,6 +42,7 @@ func (h *H) Register(r *router.Router[*core.RequestEvent]) {
 	h.registerBudget(r)
 	h.registerFiles(r)
 	h.registerM5(r)
+	h.registerLists(r)
 }
 
 type handlerFunc func(e *core.RequestEvent) error

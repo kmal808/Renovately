@@ -1,0 +1,154 @@
+package ui
+
+import "reno/internal/session"
+
+type ListItem struct {
+	ID      string
+	Content string
+	Done    bool
+}
+
+type ListView struct {
+	ID     string
+	Title  string
+	Pinned bool
+	Items  []ListItem
+}
+
+templ ListsPage(user *session.User, project Project, lists []ListView) {
+	@Layout(project.Name+" · Lists", user, &ProjectNav{ID: project.ID, Name: project.Name}) {
+		<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+			<h1 class="text-2xl font-bold">Lists</h1>
+			<p class="text-sm text-stone-500">Freeform lists — measurements, shopping, ideas, anything</p>
+		</div>
+		@ListsContent(project, lists)
+		@ListsScripts()
+	}
+}
+
+// ListsContent is the htmx swap target for all list mutations.
+templ ListsContent(project Project, lists []ListView) {
+	<div id="lists-root" class="space-y-6">
+		if len(lists) == 0 {
+			<div class="rounded-lg bg-white p-10 text-center shadow">
+				<p class="text-stone-500">No lists yet. Great for measurements, shopping runs, punch-list ideas…</p>
+			</div>
+		} else {
+			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+				for _, l := range lists {
+					@ListCard(project, l)
+				}
+			</div>
+		}
+		if canEdit(project.Role) {
+			<form class="flex max-w-xl gap-2" hx-post={ templ.URL("/projects/" + project.ID + "/lists") } hx-target="#lists-root" hx-swap="outerHTML">
+				<input class="flex-1 rounded border border-stone-300 px-3 py-2" type="text" name="title" placeholder="New list (e.g. Bathroom measurements)" required/>
+				<button class="rounded bg-amber-500 hover:bg-amber-400 font-semibold px-4 py-2" type="submit">Add list</button>
+			</form>
+		}
+	</div>
+}
+
+templ ListCard(project Project, l ListView) {
+	<section class={ "rounded-lg bg-white p-4 shadow flex flex-col " + pinnedRing(l.Pinned) }>
+		<header class="mb-2 flex items-center gap-2">
+			<h2 class="font-semibold truncate">{ l.Title }</h2>
+			<span class="text-xs text-stone-400">{ doneCount(l.Items) }/{ len(l.Items) }</span>
+			if canEdit(project.Role) {
+				<details class="relative ml-auto">
+					<summary class="cursor-pointer list-none text-stone-400 hover:text-stone-700 select-none">⋯</summary>
+					<div class="absolute right-0 z-10 mt-1 w-44 rounded border border-stone-200 bg-white p-2 text-sm shadow-lg">
+						<form hx-post={ templ.URL("/lists/" + l.ID + "/pin") } hx-target="#lists-root" hx-swap="outerHTML">
+							<button class="block w-full rounded px-2 py-1 text-left hover:bg-stone-100" type="submit">
+								if l.Pinned {
+									Unpin list
+								} else {
+									Pin list
+								}
+							</button>
+						</form>
+						<form hx-post={ templ.URL("/lists/" + l.ID + "/duplicate") } hx-target="#lists-root" hx-swap="outerHTML">
+							<button class="block w-full rounded px-2 py-1 text-left hover:bg-stone-100" type="submit">Duplicate list</button>
+						</form>
+						<form class="mt-1" hx-post={ templ.URL("/lists/" + l.ID + "/rename") } hx-target="#lists-root" hx-swap="outerHTML">
+							<input class="w-full rounded border border-stone-300 px-2 py-1 text-sm" type="text" name="title" value={ l.Title } required/>
+							<button class="mt-1 w-full rounded px-2 py-1 text-left hover:bg-stone-100" type="submit">Rename</button>
+						</form>
+						<form hx-post={ templ.URL("/lists/" + l.ID + "/delete") } hx-target="#lists-root" hx-swap="outerHTML" hx-confirm={ "Delete the list '" + l.Title + "' and its items?" }>
+							<button class="block w-full rounded px-2 py-1 text-left text-red-600 hover:bg-red-50" type="submit">Delete list</button>
+						</form>
+					</div>
+				</details>
+			}
+		</header>
+		if len(l.Items) == 0 {
+			<p class="mb-2 text-sm text-stone-400">Empty list</p>
+		} else {
+			<ul class="mb-2 flex-1 space-y-0.5" data-list={ l.ID } data-sortable="list-items">
+				for _, it := range l.Items {
+					<li class="group flex items-center gap-2 rounded px-1 py-1 hover:bg-stone-50" data-item={ it.ID }>
+						<input type="checkbox" checked={ it.Done }
+							hx-post={ templ.URL("/list-items/" + it.ID + "/toggle") }
+							hx-target="#lists-root" hx-swap="outerHTML"
+							class="h-4 w-4 accent-amber-600"/>
+						<span class={ itemTextClass(it.Done) }>{ it.Content }</span>
+						if canEdit(project.Role) {
+							<form class="ml-auto hidden group-hover:block" hx-post={ templ.URL("/list-items/" + it.ID + "/delete") } hx-target="#lists-root" hx-swap="outerHTML">
+								<button class="text-xs text-stone-300 hover:text-red-500" type="submit">✕</button>
+							</form>
+						}
+					</li>
+				}
+			</ul>
+		}
+		if canEdit(project.Role) {
+			<form class="flex gap-2 border-t border-stone-100 pt-2" hx-post={ templ.URL("/lists/" + l.ID + "/items") } hx-target="#lists-root" hx-swap="outerHTML">
+				<input class="flex-1 rounded border border-stone-300 px-2 py-1.5 text-sm" type="text" name="content" placeholder="Add item…" required/>
+				<button class="rounded bg-stone-800 hover:bg-stone-700 text-white text-sm px-3 py-1.5" type="submit">Add</button>
+			</form>
+		}
+	</section>
+}
+
+func doneCount(items []ListItem) int {
+	n := 0
+	for _, it := range items {
+		if it.Done {
+			n++
+		}
+	}
+	return n
+}
+
+func itemTextClass(done bool) string {
+	if done {
+		return "flex-1 text-sm line-through text-stone-400"
+	}
+	return "flex-1 text-sm"
+}
+
+templ ListsScripts() {
+	<script>
+		function initListSortables() {
+			document.querySelectorAll("[data-sortable='list-items']").forEach(function(list) {
+				if (list._sortable) return;
+				list._sortable = new Sortable(list, {
+					group: "list-items-" + list.dataset.list,
+					animation: 150,
+					onEnd: function(evt) {
+						var el = evt.item;
+						htmx.ajax("POST", "/list-items/" + el.dataset.item + "/move", {
+							target: "#lists-root", swap: "outerHTML",
+							values: {
+								prev: el.previousElementSibling ? (el.previousElementSibling.dataset.item || "") : "",
+								next: el.nextElementSibling ? (el.nextElementSibling.dataset.item || "") : ""
+							}
+						});
+					}
+				});
+			});
+		}
+		document.addEventListener("DOMContentLoaded", initListSortables);
+		document.addEventListener("htmx:afterSwap", initListSortables);
+	</script>
+}

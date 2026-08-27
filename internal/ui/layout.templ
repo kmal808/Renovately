@@ -30,6 +30,7 @@ templ Layout(title string, user *session.User, project *ProjectNav) {
 						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID) }>Dashboard</a>
 						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/tasks") }>Tasks</a>
 						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/timeline") }>Timeline</a>
+						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/lists") }>Lists</a>
 						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/materials") }>Materials</a>
 						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/budget") }>Budget</a>
 						<a class="hover:text-white" href={ templ.URL("/projects/" + project.ID + "/photos") }>Photos</a>

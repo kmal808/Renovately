@@ -452,3 +452,53 @@ func TestSignupKillSwitch(t *testing.T) {
 		t.Errorf("disabled signup should not create users, got %d", len(records))
 	}
 }
+
+func TestListsCrudAndDuplicate(t *testing.T) {
+	env := newTestEnv(t)
+	ownerID := createUser(t, env.app, "Owen", "o@x.com", "password123")
+	pid := seedProject(t, env.app, ownerID)
+	owner := loginClient(t, env, "o@x.com", "password123")
+
+	// create list + items
+	owner.postForm("/projects/"+pid+"/lists", url.Values{"title": {"Bathroom measurements"}}, 200)
+	listID := findRecordID(t, env.app, "lists")
+	for _, c := range []string{"Vanity: 60 in wide", "Tile floor: 40 sq ft", "Shower valve height: 48 in"} {
+		owner.postForm("/lists/"+listID+"/items", url.Values{"content": {c}}, 200)
+	}
+
+	// check off one
+	items := recordsSorted(t, env.app, "list_items")
+	owner.postForm("/list-items/"+items[0].Id+"/toggle", nil, 200)
+	if body := owner.get("/projects/"+pid+"/lists", 200); !strings.Contains(body, "1/3") {
+		t.Error("list card should show 1/3 done")
+	}
+
+	// duplicate
+	owner.postForm("/lists/"+listID+"/duplicate", nil, 200)
+	lists, _ := env.app.FindRecordsByFilter("lists", "", "sort", 0, 0)
+	if len(lists) != 2 {
+		t.Fatalf("expected 2 lists after duplicate, got %d", len(lists))
+	}
+	if body := owner.get("/projects/"+pid+"/lists", 200); !strings.Contains(body, "Bathroom measurements (copy)") {
+		t.Error("duplicate should be titled '(copy)'")
+	}
+	dupItems, _ := env.app.FindRecordsByFilter("list_items", "", "", 0, 0)
+	if len(dupItems) != 6 {
+		t.Errorf("expected 6 items total (3 + 3 copied), got %d", len(dupItems))
+	}
+
+	// reorder: move last item of original list to top
+	first, last := items[0], items[2]
+	owner.postForm("/list-items/"+last.Id+"/move", url.Values{"next": {first.Id}}, 200)
+	sorted := recordsSorted(t, env.app, "list_items")
+	if sorted[0].Id != last.Id {
+		t.Errorf("moved item should be first, got %q", sorted[0].GetString("content"))
+	}
+
+	// delete original list cascades its items
+	owner.postForm("/lists/"+listID+"/delete", nil, 200)
+	remaining, _ := env.app.FindRecordsByFilter("list_items", "", "", 0, 0)
+	if len(remaining) != 3 {
+		t.Errorf("delete should remove the list's 3 items, got %d remaining", len(remaining))
+	}
+}
